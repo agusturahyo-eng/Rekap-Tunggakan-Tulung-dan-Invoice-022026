@@ -42,6 +42,12 @@ const SHEETS = {
 let allData = [], currentDetail = [], currentTitle = "", currentPetugas = "Semua", currentSheet = "lembar1";
 let historyStack = [], sortState = { key: null, asc: true };
 
+// Fungsi mencari nilai kolom berdasarkan banyak kemungkinan nama (Case Insensitive)
+const getVal = (row, keys) => {
+    const foundKey = Object.keys(row).find(k => keys.includes(k.toLowerCase().trim()));
+    return foundKey ? String(row[foundKey]).trim() : "";
+};
+
 const parseIDR = (val) => {
   if (!val) return 0;
   let clean = String(val).replace(/[^0-9,-]/g, '').split(',')[0];
@@ -49,36 +55,41 @@ const parseIDR = (val) => {
 };
 
 const parseDate = (str) => {
-  if (!str || str === "-") return new Date(0);
+  if (!str || str === "-" || str === "0") return new Date(0);
   const parts = str.split('-');
+  if(parts.length < 3) return new Date(0);
   return new Date(parts[2], parts[1] - 1, parts[0]);
-};
-
-// --- PERBAIKAN DI SINI: Deteksi Otomatis Nama Kolom Lunas ---
-const isLunas = r => {
-  // Cek berbagai kemungkinan nama kolom tanggal di Excel
-  const val = r.tgl_lunas || r.TGL_LUNAS || r['TGL LUNAS'] || r['Tgl Lunas'] || r['Tanggal Lunas'] || r.LUNAS || r.lunas;
-  // Jika ada isinya (bukan kosong, bukan strip, bukan 0), berarti LUNAS
-  return val && val.trim().length > 1 && val.trim() !== "-" && val.trim() !== "0";
-};
-
-// --- Deteksi Otomatis Nama Kolom Tanggal Lunas untuk Sorting ---
-const getTglLunas = r => {
-  return r.tgl_lunas || r.TGL_LUNAS || r['TGL LUNAS'] || r['Tgl Lunas'] || r['Tanggal Lunas'] || r.LUNAS || r.lunas || "";
 };
 
 function loadSheet(k) {
   currentSheet = k; historyStack = []; currentPetugas = "Semua"; 
   document.querySelectorAll(".nav-link").forEach(t => t.classList.remove("active"));
   document.getElementById("tab-" + k).classList.add("active");
-  
   view.innerHTML = '<div class="text-center mt-4"><div class="spinner-border text-primary"></div><p>Memuat data...</p></div>';
 
   fetch(SHEETS[k].url + "&t=" + new Date().getTime()).then(r => r.text()).then(csv => {
-    allData = Papa.parse(csv, {header: true, skipEmptyLines: true}).data;
+    const rawData = Papa.parse(csv, {header: true, skipEmptyLines: true}).data;
+    
+    // MAPPING ULANG DATA AGAR AMAN DARI PERBEDAAN NAMA KOLOM
+    allData = rawData.map(r => ({
+        idpel: getVal(r, ['idpel', 'id pelanggan', 'id_pelanggan']),
+        nama: getVal(r, ['nama', 'nama pelanggan', 'nama_pelanggan']),
+        tarif: getVal(r, ['tarif', 'trf']),
+        daya: getVal(r, ['daya', 'dy']),
+        rptag: getVal(r, ['rptag', 'rp tag', 'tagihan']),
+        rpbk: getVal(r, ['rpbk', 'bk', 'denda']),
+        jumlah: getVal(r, ['jumlah', 'total', 'total rp', 'rp']),
+        petugas: getVal(r, ['petugas', 'nama petugas', 'ptgs']) || "Tanpa Nama",
+        alamat: getVal(r, ['alamat', 'alamat pelanggan']),
+        koked: getVal(r, ['koked', 'kode kedudukan']),
+        tgl_lunas: getVal(r, ['tgl_lunas', 'tgl lunas', 'tanggal lunas', 'lunas'])
+    }));
+
     renderPetugas();
   });
 }
+
+const isLunas = r => r.tgl_lunas !== "" && r.tgl_lunas !== "-" && r.tgl_lunas !== "0";
 
 function pushView(fn) { historyStack.push(fn); backBtn.classList.remove("d-none"); }
 backBtn.onclick = () => {
@@ -182,13 +193,7 @@ function openPetugas(p) {
   currentPetugas = p; pushView(renderPetugas);
   const data = allData.filter(r => r.petugas === p);
   const lunas = data.filter(isLunas), belum = data.filter(r => !isLunas(r)), byDate = {};
-  
-  lunas.forEach(r => { 
-    const tgl = getTglLunas(r);
-    byDate[tgl] = byDate[tgl] || {j: 0, rp: 0}; 
-    byDate[tgl].j++; byDate[tgl].rp += parseIDR(r.jumlah); 
-  });
-  
+  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
   let h = `<h6 class="text-primary fw-bold">Petugas: ${p}</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
@@ -198,22 +203,16 @@ function openPetugas(p) {
 function openGlobal() {
   currentPetugas = "Semua"; pushView(renderPetugas);
   const lunas = allData.filter(isLunas), belum = allData.filter(r => !isLunas(r)), byDate = {};
-  
-  lunas.forEach(r => { 
-    const tgl = getTglLunas(r);
-    byDate[tgl] = byDate[tgl] || {j: 0, rp: 0}; 
-    byDate[tgl].j++; byDate[tgl].rp += parseIDR(r.jumlah); 
-  });
-
+  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
   let h = `<h6 class="text-primary fw-bold">Semua Petugas</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailGlobalLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
   view.innerHTML = h + `</tbody></table></div>`;
 }
 
-function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && getTglLunas(r) === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
+function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && r.tgl_lunas === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
 function detailBelum() { currentTitle = "Belum_Lunas"; const p = currentPetugas; currentDetail = allData.filter(r => (p === "Semua" ? true : r.petugas === p) && !isLunas(r)); pushView(()=>(p==="Semua"?openGlobal():openPetugas(p))); renderDetail(); }
-function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && getTglLunas(r) === t); pushView(openGlobal); renderDetail(); }
+function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && r.tgl_lunas === t); pushView(openGlobal); renderDetail(); }
 
 function renderDetail() {
   sortState = { key: null, asc: true };
@@ -236,7 +235,7 @@ function drawTable(data) {
     drawTable(sorted);
   };
   const icon = (k) => sortState.key === k ? (sortState.asc ? ' ▲' : ' ▼') : '';
-  let h = `<div class="table-responsive"><table class="table table-sm table-bordered" style="font-size:0.7rem"><thead class="table-primary text-nowrap"><tr><th class="clickable" onclick="triggerSort('idpel')">IDPEL${icon('idpel')}</th><th class="clickable" onclick="triggerSort('nama')">Nama${icon('nama')}</th><th class="clickable" onclick="triggerSort('koked')">Koked${icon('koked')}</th><th class="clickable" onclick="triggerSort('jumlah')">Rp${icon('jumlah')}</th></tr></thead><tbody>`;
+  let h = `<div class="table-responsive"><table class="table table-sm table-bordered" style="font-size:0.7rem"><thead class="table-primary text-nowrap"><tr><th class="clickable" onclick="triggerSort('idpel')">IDPEL${icon('idpel')}</th><th class="clickable" onclick="sortState.key='nama'; triggerSort('nama')">Nama${icon('nama')}</th><th class="clickable" onclick="triggerSort('koked')">Koked${icon('koked')}</th><th class="clickable" onclick="triggerSort('jumlah')">Rp${icon('jumlah')}</th></tr></thead><tbody>`;
   data.forEach(r => { h += `<tr class="clickable" onclick="showCardsByData('${r.idpel}')"><td>${r.idpel}</td><td>${r.nama}</td><td>${r.koked}</td><td class="text-end">${parseIDR(r.jumlah).toLocaleString("id-ID")}</td></tr>`; });
   document.getElementById("tableArea").innerHTML = h + `</tbody></table></div>`;
 }
