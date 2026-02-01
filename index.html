@@ -36,7 +36,6 @@ const SHEETS = {
   lembar1: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=354207978&single=true&output=csv"},
   lembar2: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=311394824&single=true&output=csv"},
   lembar3: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=654408403&single=true&output=csv"},
-  // DATA INVOICE DITAMBAHKAN DI SINI
   invoice: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=577428656&single=true&output=csv"}
 };
 
@@ -55,17 +54,27 @@ const parseDate = (str) => {
   return new Date(parts[2], parts[1] - 1, parts[0]);
 };
 
-const isLunas = r => r.tgl_lunas && r.tgl_lunas.trim() !== "" && r.tgl_lunas !== "-";
+// --- PERBAIKAN DI SINI: Deteksi Otomatis Nama Kolom Lunas ---
+const isLunas = r => {
+  // Cek berbagai kemungkinan nama kolom tanggal di Excel
+  const val = r.tgl_lunas || r.TGL_LUNAS || r['TGL LUNAS'] || r['Tgl Lunas'] || r['Tanggal Lunas'] || r.LUNAS || r.lunas;
+  // Jika ada isinya (bukan kosong, bukan strip, bukan 0), berarti LUNAS
+  return val && val.trim().length > 1 && val.trim() !== "-" && val.trim() !== "0";
+};
+
+// --- Deteksi Otomatis Nama Kolom Tanggal Lunas untuk Sorting ---
+const getTglLunas = r => {
+  return r.tgl_lunas || r.TGL_LUNAS || r['TGL LUNAS'] || r['Tgl Lunas'] || r['Tanggal Lunas'] || r.LUNAS || r.lunas || "";
+};
 
 function loadSheet(k) {
   currentSheet = k; historyStack = []; currentPetugas = "Semua"; 
   document.querySelectorAll(".nav-link").forEach(t => t.classList.remove("active"));
   document.getElementById("tab-" + k).classList.add("active");
   
-  // Tambah loading biar kelihatan prosesnya
   view.innerHTML = '<div class="text-center mt-4"><div class="spinner-border text-primary"></div><p>Memuat data...</p></div>';
 
-  fetch(SHEETS[k].url).then(r => r.text()).then(csv => {
+  fetch(SHEETS[k].url + "&t=" + new Date().getTime()).then(r => r.text()).then(csv => {
     allData = Papa.parse(csv, {header: true, skipEmptyLines: true}).data;
     renderPetugas();
   });
@@ -77,7 +86,6 @@ backBtn.onclick = () => {
   if (historyStack.length === 0) { backBtn.classList.add("d-none"); renderPetugas(); }
 };
 
-/* ================= TEKS PERSIS TUL VI-01 DENGAN BARIS BARU WA ================= */
 const getFullText = (r, type) => {
   const date = new Date();
   const nBulanFull = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
@@ -157,7 +165,6 @@ function createPDF(r) {
   doc.save(`TUL_${r.idpel}.pdf`);
 }
 
-/* ================= ALUR DATA ================= */
 function renderPetugas() {
   const map = {}; let totalRp = 0;
   allData.forEach(r => {
@@ -175,7 +182,13 @@ function openPetugas(p) {
   currentPetugas = p; pushView(renderPetugas);
   const data = allData.filter(r => r.petugas === p);
   const lunas = data.filter(isLunas), belum = data.filter(r => !isLunas(r)), byDate = {};
-  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
+  
+  lunas.forEach(r => { 
+    const tgl = getTglLunas(r);
+    byDate[tgl] = byDate[tgl] || {j: 0, rp: 0}; 
+    byDate[tgl].j++; byDate[tgl].rp += parseIDR(r.jumlah); 
+  });
+  
   let h = `<h6 class="text-primary fw-bold">Petugas: ${p}</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
@@ -185,16 +198,22 @@ function openPetugas(p) {
 function openGlobal() {
   currentPetugas = "Semua"; pushView(renderPetugas);
   const lunas = allData.filter(isLunas), belum = allData.filter(r => !isLunas(r)), byDate = {};
-  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
+  
+  lunas.forEach(r => { 
+    const tgl = getTglLunas(r);
+    byDate[tgl] = byDate[tgl] || {j: 0, rp: 0}; 
+    byDate[tgl].j++; byDate[tgl].rp += parseIDR(r.jumlah); 
+  });
+
   let h = `<h6 class="text-primary fw-bold">Semua Petugas</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailGlobalLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
   view.innerHTML = h + `</tbody></table></div>`;
 }
 
-function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && r.tgl_lunas === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
+function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && getTglLunas(r) === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
 function detailBelum() { currentTitle = "Belum_Lunas"; const p = currentPetugas; currentDetail = allData.filter(r => (p === "Semua" ? true : r.petugas === p) && !isLunas(r)); pushView(()=>(p==="Semua"?openGlobal():openPetugas(p))); renderDetail(); }
-function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && r.tgl_lunas === t); pushView(openGlobal); renderDetail(); }
+function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && getTglLunas(r) === t); pushView(openGlobal); renderDetail(); }
 
 function renderDetail() {
   sortState = { key: null, asc: true };
