@@ -25,7 +25,7 @@ tr:hover{background:#eef3ff}
   <li class="nav-item"><a class="nav-link" id="tab-lembar3" onclick="loadSheet('lembar3')">Lembar 3</a></li>
   <li class="nav-item"><a class="nav-link" id="tab-invoice" onclick="loadSheet('invoice')">Invoice</a></li>
 </ul>
-<h4 class="text-center text-primary mb-3">⚡ Rekap Tunggakan ULP Tulung</h4>
+<h4 class="text-center text-primary mb-3">⚡ Rekap Penagihan ULP Tulung</h4>
 <button id="backBtn" class="btn btn-secondary btn-sm mb-2 d-none">⬅ Kembali</button>
 <div id="view"></div>
 </div>
@@ -36,7 +36,7 @@ const SHEETS = {
   lembar1: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=354207978&single=true&output=csv"},
   lembar2: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=311394824&single=true&output=csv"},
   lembar3: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=654408403&single=true&output=csv"},
-  // Pastikan GID di bawah ini sesuai dengan Tab Invoice Anda
+  // URL INVOICE BARU ANDA SUDAH DIPASANG DI SINI:
   invoice: {url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0oO36v0vrge07HwX1zLsrGfuUxElZ3becef4DFHLNxsz2Lrohya5oThpvmkjzsNBF3_9hSdq0q4Ko/pub?gid=577428656&single=true&output=csv"}
 };
 
@@ -55,7 +55,15 @@ const parseDate = (str) => {
   return new Date(parts[2], parts[1] - 1, parts[0]);
 };
 
-const isLunas = r => r.tgl_lunas && r.tgl_lunas.trim() !== "" && r.tgl_lunas !== "-";
+// PERBAIKAN PENTING: Fungsi isLunas lebih teliti membaca kolom
+const isLunas = r => {
+    // Cari kolom tgl_lunas (huruf kecil atau besar)
+    let val = r.tgl_lunas || r.Tgl_Lunas || r['Tgl Lunas'];
+    return val && val.trim() !== "" && val !== "-";
+};
+
+// Helper untuk ambil tgl_lunas yang valid
+const getTglLunas = r => r.tgl_lunas || r.Tgl_Lunas || r['Tgl Lunas'];
 
 function loadSheet(k) {
   currentSheet = k; historyStack = []; currentPetugas = "Semua"; 
@@ -63,6 +71,7 @@ function loadSheet(k) {
   document.getElementById("tab-" + k).classList.add("active");
   view.innerHTML = "<p class='text-center'>Memuat data...</p>";
   fetch(SHEETS[k].url).then(r => r.text()).then(csv => {
+    // Parse header tanpa transform case agar aman, kita handle di isLunas
     allData = Papa.parse(csv, {header: true, skipEmptyLines: true}).data;
     renderPetugas();
   });
@@ -83,9 +92,8 @@ const getFullText = (r, type) => {
   const blnIni = `${nBulanShort[date.getMonth()]}-${date.getFullYear()}`;
   const blnLalu = date.getMonth() === 0 ? `DES-${date.getFullYear()-1}` : `${nBulanShort[date.getMonth()-1]}-${date.getFullYear()}`;
   
-  // --- INI LOGIKA PEMISAH (INVOICE vs LEMBAR 1,2,3) ---
   if (currentSheet === 'invoice') {
-    // ==== FORMAT KHUSUS INVOICE (Pelanggan Setia) ====
+    // ==== FORMAT KHUSUS INVOICE ====
     if (type === 'WA') {
       return encodeURIComponent(
         "*PT. PLN (PERSERO) UID JAWA TENGAH DAN DIY*\n" +
@@ -115,7 +123,7 @@ const getFullText = (r, type) => {
     return { tgl: `${date.getDate()} ${blnIniFull} ${date.getFullYear()}`, blnIniFull };
 
   } else {
-    // ==== FORMAT ASLI LEMBAR 1, 2, 3 (Pemutusan Sementara / TUL VI-01) ====
+    // ==== FORMAT ASLI LEMBAR 1-3 ====
     let periode = (currentSheet === 'lembar1') ? `${blnIni} s/d ${blnIni} (1 LEMBAR)` : `${blnLalu} s/d ${blnIni} (2 LEMBAR)`;
     const body1 = "Dengan ini diberitahukan dengan hormat bahwa pada hari ini aliran listrik di rumah/alamat seperti tersebut diatas terpaksa diputus untuk sementara karena rekening listrik belum dilunasi pada waktu yang telah ditetapkan.";
     const body2 = "Penyambungan kembali akan dilakukan pada setiap hari jam kerja apabila rekening serta biaya keterlambatan dilunasi di tempat penerimaan pembayaran rekening listrik, kantor pos, atau bank yang ditunjuk oleh PLN.";
@@ -152,12 +160,11 @@ const getFullText = (r, type) => {
   }
 };
 
-/* ================= FUNGSI PDF (TERPISAH JUGA) ================= */
+/* ================= FUNGSI PDF ================= */
 function createPDF(r) {
   const doc = new jsPDF();
   const info = getFullText(r, 'PDF');
   
-  // --- PDF UNTUK INVOICE ---
   if (currentSheet === 'invoice') {
     doc.setFontSize(9);
     doc.text("PT. PLN (PERSERO) UID JAWA TENGAH DAN DIY", 15, 15);
@@ -192,8 +199,8 @@ function createPDF(r) {
     doc.setFontSize(8); doc.setFont(undefined, 'italic');
     doc.text("ABAIKAN PEMBERITAHUAN INI JIKA SUDAH MEMBAYAR TAGIHAN", 15, 160);
 
-  // --- PDF UNTUK LEMBAR 1, 2, 3 (TUL VI-01 ASLI) ---
   } else {
+    // --- PDF LEMBAR 1-3 ---
     doc.setFontSize(8);
     doc.text("PT. PLN (PERSERO) UID JAWA TENGAH DAN DIY", 15, 15);
     doc.text("UP3 KLATEN", 15, 19); doc.text("ULP TULUNG", 15, 23); doc.text("NO. TUL :", 150, 19);
@@ -230,7 +237,7 @@ function createPDF(r) {
   doc.save(`${currentSheet === 'invoice' ? 'Tagihan' : 'TUL'}_${r.idpel}.pdf`);
 }
 
-/* ================= ALUR DATA (TIDAK BERUBAH) ================= */
+/* ================= ALUR DATA ================= */
 function renderPetugas() {
   const map = {}; let totalRp = 0;
   allData.forEach(r => {
@@ -248,7 +255,14 @@ function openPetugas(p) {
   currentPetugas = p; pushView(renderPetugas);
   const data = allData.filter(r => r.petugas === p);
   const lunas = data.filter(isLunas), belum = data.filter(r => !isLunas(r)), byDate = {};
-  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
+  
+  // Perbaikan: Pakai getTglLunas() untuk grouping tanggal
+  lunas.forEach(r => { 
+    let t = getTglLunas(r);
+    byDate[t] = byDate[t] || {j: 0, rp: 0}; 
+    byDate[t].j++; byDate[t].rp += parseIDR(r.jumlah); 
+  });
+  
   let h = `<h6 class="text-primary fw-bold">Petugas: ${p}</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
@@ -258,16 +272,20 @@ function openPetugas(p) {
 function openGlobal() {
   currentPetugas = "Semua"; pushView(renderPetugas);
   const lunas = allData.filter(isLunas), belum = allData.filter(r => !isLunas(r)), byDate = {};
-  lunas.forEach(r => { byDate[r.tgl_lunas] = byDate[r.tgl_lunas] || {j: 0, rp: 0}; byDate[r.tgl_lunas].j++; byDate[r.tgl_lunas].rp += parseIDR(r.jumlah); });
+  lunas.forEach(r => { 
+    let t = getTglLunas(r);
+    byDate[t] = byDate[t] || {j: 0, rp: 0}; 
+    byDate[t].j++; byDate[t].rp += parseIDR(r.jumlah); 
+  });
   let h = `<h6 class="text-primary fw-bold">Semua Petugas</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-success"><tr><th>Tanggal</th><th>Plg</th><th>Total Rp</th></tr></thead><tbody>`;
   if (belum.length > 0) h += `<tr class="clickable" onclick="detailBelum()"><td>BELUMLUNAS</td><td>${belum.length}</td><td class="text-end">${belum.reduce((a,b)=>a+parseIDR(b.jumlah),0).toLocaleString("id-ID")}</td></tr>`;
   Object.keys(byDate).sort((a,b) => parseDate(b) - parseDate(a)).forEach(t => { h += `<tr class="clickable" onclick="detailGlobalLunas('${t}')"><td>${t}</td><td>${byDate[t].j}</td><td class="text-end">${byDate[t].rp.toLocaleString("id-ID")}</td></tr>`; });
   view.innerHTML = h + `</tbody></table></div>`;
 }
 
-function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && r.tgl_lunas === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
+function detailLunas(t) { currentTitle = `Lunas_${t}`; currentDetail = allData.filter(r => r.petugas === currentPetugas && isLunas(r) && getTglLunas(r) === t); pushView(()=>openPetugas(currentPetugas)); renderDetail(); }
 function detailBelum() { currentTitle = "Belum_Lunas"; const p = currentPetugas; currentDetail = allData.filter(r => (p === "Semua" ? true : r.petugas === p) && !isLunas(r)); pushView(()=>(p==="Semua"?openGlobal():openPetugas(p))); renderDetail(); }
-function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && r.tgl_lunas === t); pushView(openGlobal); renderDetail(); }
+function detailGlobalLunas(t) { currentTitle = `Global_Lunas_${t}`; currentDetail = allData.filter(r => isLunas(r) && getTglLunas(r) === t); pushView(openGlobal); renderDetail(); }
 
 function renderDetail() {
   sortState = { key: null, asc: true };
