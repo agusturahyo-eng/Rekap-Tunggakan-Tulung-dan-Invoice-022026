@@ -76,7 +76,7 @@ function loadSheet(k) {
         jumlah: getVal(r, ['jumlah', 'total', 'rp']),
         petugas: getVal(r, ['petugas', 'ptgs']) || "Tanpa Nama",
         alamat: getVal(r, ['alamat', 'almt']),
-        koked: getVal(r, ['koked', 'kdkd']),
+        koked: getVal(r, ['koked']),
         tgl_lunas: getVal(r, ['tgllunas', 'lunas', 'tgl_lunas'])
     }));
     renderPetugas();
@@ -89,90 +89,82 @@ backBtn.onclick = () => {
   if (historyStack.length === 0) { backBtn.classList.add("d-none"); renderPetugas(); }
 };
 
-// --- LOGIKA PESAN WA ---
+// --- TEMPLATE PESAN WA (TETAP SAMA) ---
 function getWAMessage(r) {
   const date = new Date();
   const nBulanFull = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
   const blnIni = nBulanFull[date.getMonth()] + " " + date.getFullYear();
   
   if (currentSheet === 'invoice') {
-    return encodeURIComponent("*PT. PLN (PERSERO) ULP TULUNG*\n\n*PEMBERITAHUAN TAGIHAN LISTRIK*\n\n*Nama* : " + r.nama + "\n*IDPEL* : " + r.idpel + "\n*Alamat* : " + (r.alamat || '-') + "\n*Tagihan* : " + blnIni + "\n*Total* : *Rp " + parseIDR(r.jumlah).toLocaleString("id-ID") + "*\n\nMohon segera melakukan pembayaran sebelum tanggal 20 untuk menghindari pemutusan sementara. Terima kasih.");
+    return encodeURIComponent("*PT. PLN (PERSERO) ULP TULUNG*\n\n*PEMBERITAHUAN TAGIHAN LISTRIK*\n\n*Nama* : " + r.nama + "\n*IDPEL* : " + r.idpel + "\n*Alamat* : " + (r.alamat || '-') + "\n*Total* : *Rp " + parseIDR(r.jumlah).toLocaleString("id-ID") + "*\n\nMohon segera melakukan pembayaran. Terima kasih.");
   } else {
-    return encodeURIComponent("*PT. PLN (PERSERO) ULP TULUNG*\n\n*PEMBERITAHUAN TUNGGAKAN*\n\n*Nama* : " + r.nama + "\n*IDPEL* : " + r.idpel + "\n*Total* : *Rp " + parseIDR(r.jumlah).toLocaleString("id-ID") + "*\n\nMohon segera melunasi tunggakan Anda untuk menghindari pemutusan sementara.");
+    return encodeURIComponent("*PT. PLN (PERSERO) ULP TULUNG*\n\n*PEMBERITAHUAN TUNGGAKAN TUL VI-01*\n\n*Nama* : " + r.nama + "\n*IDPEL* : " + r.idpel + "\n*Total* : *Rp " + parseIDR(r.jumlah).toLocaleString("id-ID") + "*\n\nMohon segera melunasi tunggakan Anda untuk menghindari pemutusan sementara.");
   }
 }
 
-// --- FUNGSI PDF (KHUSUS INVOICE F4 BAGI 4) ---
+// --- FUNGSI PDF (DUAL TEMPLATE) ---
 function createPDF(r) {
-  // F4 adalah 215 x 330 mm. Dibagi 4 (potongan memanjang) kira-kira 107.5 x 165 mm
-  // Di sini kita pakai orientasi Portrait kecil (107 x 165)
-  const doc = new jsPDF({
-    orientation: 'p',
-    unit: 'mm',
-    format: [107, 165]
-  });
-
   const date = new Date();
   const nBulanFull = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
-  const blnIni = nBulanFull[date.getMonth()] + " " + date.getFullYear();
+  const nBulanShort = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGU", "SEP", "OKT", "NOP", "DES"];
+  const blnIni = `${nBulanShort[date.getMonth()]}-${date.getFullYear()}`;
+  const tglLengkap = `${date.getDate()} ${nBulanFull[date.getMonth()]} ${date.getFullYear()}`;
 
+  // JIKA SHEET INVOICE -> PAKAI FORMAT F4 BAGI 4
   if (currentSheet === 'invoice') {
-    // Header
-    doc.setFontSize(7);
-    doc.setFont(undefined, 'bold');
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: [107, 165] });
+    doc.setFontSize(7); doc.setFont(undefined, 'bold');
     doc.text("PT. PLN (PERSERO) UID JAWA TENGAH DAN DIY", 5, 10);
-    doc.text("UP3 KLATEN", 5, 13);
-    doc.text("ULP TULUNG", 5, 16);
-    doc.text("Petugas : " + r.petugas, 75, 10);
-
-    // Judul
-    doc.setFontSize(9);
-    doc.text("PEMBERITAHUAN TAGIHAN LISTRIK", 53.5, 25, {align: "center"});
+    doc.text("UP3 KLATEN / ULP TULUNG", 5, 13);
+    doc.text("Petugas : " + r.petugas, 70, 10);
+    doc.setFontSize(9); doc.text("PEMBERITAHUAN TAGIHAN LISTRIK", 53.5, 25, {align: "center"});
     doc.line(30, 26, 77, 26);
-
-    // Data Pelanggan
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.text("Pelanggan setia PLN,", 5, 33);
-    
+    doc.setFontSize(8); doc.setFont(undefined, 'normal');
     doc.text("Nama", 5, 40); doc.text(": " + r.nama, 25, 40);
     doc.text("Idpel", 5, 45); doc.text(": " + r.idpel, 25, 45);
     doc.text("Alamat", 5, 50); doc.text(": " + (r.alamat || '-'), 25, 50);
-    doc.text("Tarif / Daya", 5, 55); doc.text(": " + r.tarif + " / " + r.daya + " VA", 25, 55);
-    
+    doc.text("Trf/Daya", 5, 55); doc.text(": " + r.tarif + " / " + r.daya + " VA", 25, 55);
     doc.text("Koked", 65, 45); doc.text(": " + (r.koked || '-'), 78, 45);
-
-    // Isi Berita
-    let msg = `Bersama ini kami sampaikan bahwa Jumlah Total tagihan listrik bulan ${blnIni} adalah Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}. Agar terhindar dari pemutusan aliran listrik, kami berharap agar tagihan di atas segera dilunasi. Batas akhir pembayaran tagihan listrik adalah tanggal 20 setiap bulannya. Apabila sampai dengan batas waktu yang ditentukan tanggal 20 belum lunas, maka akan dilakukan pemutusan aliran listrik.`;
-    let splitMsg = doc.splitTextToSize(msg, 97);
-    doc.text(splitMsg, 5, 65);
-
-    doc.text("Demikian atas perhatian dan kerjasamanya diucapkan terimakasih", 5, 100);
-
-    // Footer
-    doc.text(`Tulung, ${date.getDate()} ${blnIni}`, 65, 110);
+    let msg = `Bersama ini kami sampaikan bahwa Jumlah Total tagihan listrik bulan ${nBulanFull[date.getMonth()]} adalah Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}. Batas akhir pembayaran adalah tanggal 20. Apabila lewat tanggal tersebut belum lunas, maka akan dilakukan pemutusan aliran listrik.`;
+    doc.text(doc.splitTextToSize(msg, 97), 5, 65);
+    doc.text(`Tulung, ${tglLengkap}`, 65, 110);
     doc.setFont(undefined, 'bold');
-    doc.text("BAYARLAH LISTRIK TANGGAL 1-15 SETIAP BULANNYA", 5, 120);
-    doc.text("PASTI NYAMAN SEMUA SENANG", 5, 125);
     doc.text("MARTONO AJI PRABOWO", 65, 130);
-    doc.setFontSize(7);
-    doc.text("ABAIKAN PEMBERITAHUAN INI JIKA SUDAH MEMBAYAR TAGIHAN", 5, 140);
-    doc.line(5, 137, 102, 137);
+    doc.save(`Invoice_${r.idpel}.pdf`);
 
-  } else {
-    // Format standar untuk Lembar 1,2,3
-    doc.setFontSize(10);
-    doc.text("PEMBERITAHUAN TUNGGAKAN", 15, 20);
-    doc.text(`IDPEL: ${r.idpel}`, 15, 35);
-    doc.text(`Nama: ${r.nama}`, 15, 42);
-    doc.text(`Total: Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}`, 15, 49);
-    doc.text("Mohon segera dilunasi. Terima kasih.", 15, 65);
+  } 
+  // JIKA SHEET LEMBAR 1, 2, 3 -> PAKAI FORMAT TUL VI-01 (Kertas Standar A4)
+  else {
+    const doc = new jsPDF();
+    const blnLalu = date.getMonth() === 0 ? `DES-${date.getFullYear()-1}` : `${nBulanShort[date.getMonth()-1]}-${date.getFullYear()}`;
+    let periode = (currentSheet === 'lembar1') ? `${blnIni} (1 LEMBAR)` : `${blnLalu} s/d ${blnIni} (2 LEMBAR)`;
+    
+    doc.setFontSize(8); doc.text("PT. PLN (PERSERO) ULP TULUNG", 15, 15);
+    doc.setFont(undefined, 'bold'); doc.setFontSize(11);
+    doc.text("PEMBERITAHUAN PELAKSANAAN PEMUTUSAN SEMENTARA", 105, 30, {align: "center"});
+    doc.setFont(undefined, 'normal'); doc.setFontSize(10);
+    doc.text(`Nama : ${r.nama}`, 15, 45);
+    doc.text(`IDPEL : ${r.idpel}`, 15, 52);
+    doc.text(`Alamat : ${r.alamat || '-'}`, 15, 59);
+    doc.text(`Rekening : ${periode}`, 15, 66);
+    doc.text(`Total Tunggakan : Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}`, 15, 73);
+
+    const b1 = "Dengan ini diberitahukan dengan hormat bahwa pada hari ini aliran listrik di rumah/alamat seperti tersebut diatas terpaksa diputus untuk sementara karena rekening listrik belum dilunasi pada waktu yang telah ditetapkan.";
+    const b2 = "Penyambungan kembali akan dilakukan apabila rekening serta biaya keterlambatan dilunasi di tempat penerimaan pembayaran resmi.";
+    const b3 = "Apabila dalam jangka waktu 60 hari tunggakan belum dilunasi, maka instalasi milik PLN akan dibongkar.";
+    
+    doc.text(doc.splitTextToSize(b1, 180), 15, 85);
+    doc.text(doc.splitTextToSize(b2, 180), 15, 105);
+    doc.text(doc.splitTextToSize(b3, 180), 15, 120);
+
+    doc.text(`TULUNG, ${tglLengkap}`, 140, 145);
+    doc.text("MANAGER", 150, 150);
+    doc.setFont(undefined, 'bold'); doc.text("MARTONO AJI PRABOWO", 140, 170);
+    doc.save(`TUL_VI_01_${r.idpel}.pdf`);
   }
-
-  doc.save(`Invoice_${r.idpel}.pdf`);
 }
 
-/* --- Fungsi Render --- */
+/* --- FUNGSI RENDER (TETAP) --- */
 function renderPetugas() {
   const map = {}; let totalRp = 0;
   allData.forEach(r => {
