@@ -114,7 +114,8 @@ function createPDF(r) {
     doc.text("Alamat", 10, 56); doc.text(": " + (r.alamat || '-'), 35, 56);
     doc.text("Tarif / Daya", 10, 61); doc.text(": " + r.tarif + "/" + r.daya, 35, 61); doc.text("No. Kwh", 85, 61); doc.text(": " + r.no_kwh, 105, 61);
 
-    const narasi = `Bersama ini kami sampaikan bahwa Jumlah Total tagihan listrik bulan ${nBulanFull[date.getMonth()]} ${date.getFullYear()} adalah Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}. Agar terhindar dari pemutusan aliran listrik, kami berharap agar tagihan di atas segera dilunasi. Batas akhir pembayaran tagihan listrik adalah tanggal 20 setiap bulannya & hari libur transaksi masih bisa dilakukan pada Loket-loket PPOB online. Apabila sampai dengan batas waktu yang ditentukan, tanggal 20 belum lunas, maka akan dilakukan pemutusan aliran listrik. Demikian atas perhatian dan kerjasamanya diucapkan terimakasih.`;
+    const narasi = `Bersama ini kami sampaikan bahwa Jumlah Total tagihan listrik bulan ${nBulanFull[date.getMonth()]} ${date.getFullYear()} adalah Rp ${parseIDR(r.jumlah).toLocaleString("id-ID")}. Agar terhindar dari pemutusan aliran listrik, kami berharap agar tagihan di atas segera dilunasi. Batas akhir pembayaran tagihan listrik adalah tanggal 20 setiap bulannya & hari libur transaksi masih bisa dilakukan pada Loket-loket PPOB online. Apabila sampai dengan batas waktu yang ditentukan, tanggal 20 belum lunas, maka akan dilakukan pemutusan aliran listrik. Demikian atas perhatian dan kerjasamanya diucapkan terimakasih.
+    Demikian atas perhatian dan kerjasamanya diucapkan terimakasih`;
     
     let splitNarasi = doc.splitTextToSize(narasi, 120);
     doc.text(splitNarasi, 10, 70);
@@ -151,7 +152,9 @@ function createPDF(r) {
     doc.setFont(undefined, 'bold');
     doc.text("Jumlah Tunggakan : Rp. " + parseIDR(r.jumlah).toLocaleString("id-ID"), 10, 77);
     doc.setFont(undefined, 'normal');
-    const txt = "Dengan ini diberitahukan bahwa aliran listrik diputus sementara karena belum lunas. Mohon segera selesaikan pembayaran.";
+    const txt = "Dengan ini diberitahukan dengan hormat bahwa pada hari ini aliran listrik di rumah/alamat seperti tersebut diatas terpaksa diputus untuk sementara karena rekening listrik belum dilunasi pada waktu yang telah ditetapkan.
+Penyambungan kembali akan dilakukan pada setiap hari jam kerja apabila rekening serta biaya keterlambatan dilunasi di tempat penerimaan pembayaran rekening listrik, kantor pos, atau bank yang ditunjuk oleh PLN.
+Apabila dalam jangka waktu 60 hari terhitung sejak dilakukan pemutusan sementara tunggakan belum dilunasi, maka instalasi milik PLN akan dibongkar, dan penyambungan kembali dapat dilaksanakan setelah Saudara menyelesaikan Biaya Penyambungan yang diperlakukan sebagai sambungan baru serta tetap diwajibkan membayar tagihan listrik yang belum dilunasi beserta dendanya..";
     doc.text(doc.splitTextToSize(txt, 120), 10, 85);
     doc.text(`Tulung, ${tglLengkap}`, 85, 110);
     doc.text("MARTONO AJI PRABOWO", 85, 125);
